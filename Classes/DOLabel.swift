@@ -14,15 +14,17 @@ private class TextLayer: CALayer {
 
     override func draw(in ctx: CGContext) {
         ctx.saveGState()
+        defer {
+            super.draw(in: ctx)
+            ctx.restoreGState()
+        }
         textLabel?.draw(context: ctx)
-        ctx.restoreGState()
-        super.draw(in: ctx)
     }
 }
 
 open class DOLabel: NSView {
     private var drawingRect: CGRect = .zero
-    private static let sizeCache = NSCache<NSString, NSValue>()
+    private static let sizeCache = NSCache<NSNumber, NSValue>()
 
     public init() {
         super.init(frame: NSRect.zero)
@@ -47,6 +49,7 @@ open class DOLabel: NSView {
     private func commonInit() {
         wantsLayer = true
         canDrawConcurrently = true
+        textLayer?.isGeometryFlipped = true
         textLayer?.textLabel = self
         layerContentsRedrawPolicy = .onSetNeedsDisplay
         setContentHuggingPriority(.fittingSizeCompression, for: .horizontal)
@@ -54,9 +57,15 @@ open class DOLabel: NSView {
     }
 
     fileprivate func draw(context: CGContext) {
+        context.textMatrix = .identity
+        context.setAllowsFontSubpixelPositioning(true)
+        context.setAllowsAntialiasing(true)
+        context.setAllowsFontSubpixelQuantization(true)
+        context.setAllowsFontSmoothing(true)
+
+        context.setShouldSubpixelPositionFonts(true)
         context.setShouldAntialias(true)
         context.setShouldSmoothFonts(true)
-        context.setAllowsFontSubpixelPositioning(true)
         context.setShouldSubpixelQuantizeFonts(true)
 
         let mutablePath = CGMutablePath()
@@ -74,14 +83,15 @@ open class DOLabel: NSView {
 
     private func calculateRect() {
         defer {
-            invalidateIntrinsicContentSize()
             needsDisplay = true
+            invalidateIntrinsicContentSize()
             displayIfNeeded()
         }
-        let cacheKey = "\(text ?? "")-\(font.fontName)-\(font.pointSize)-" +
+        let cacheKeyValue = attributedText ?? ("\(text ?? "")-\(font.fontName)-\(font.pointSize)-" +
             "\(textAlignment.rawValue)-\(lineSpacing ?? 0)-\(numberOfLines)-" +
             "\(lineBreakMode)-\(preferredMaxLayoutWidth ?? bounds.width)-" +
-            "\(margins)" as NSString
+            "\(margins)" as NSString)
+        let cacheKey = NSNumber(value: cacheKeyValue.hashValue)
 
         if let cachedSize = DOLabel.sizeCache.object(forKey: cacheKey) {
             drawingRect = cachedSize.rectValue
